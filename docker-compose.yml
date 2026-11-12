@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Java Task Service (Spring Boot)
+  task-service:
+    build:
+      context: ./task-service-java
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - microservices-network
+
+  # TypeScript Notification Service
+  notification-service:
+    build:
+      context: ./notification-service-ts
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - NODE_ENV=production
+      - TASK_SERVICE_URL=http://task-service:8081
+      - LOG_LEVEL=info
+    depends_on:
+      task-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - microservices-network
+
+  # TypeScript API Gateway
+  api-gateway:
+    build:
+      context: ./gateway-ts
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - TASK_SERVICE_URL=http://task-service:8081
+      - NOTIFICATION_SERVICE_URL=http://notification-service:3001
+      - LOG_LEVEL=info
+    depends_on:
+      task-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - microservices-network
+
+networks:
+  microservices-network:
+    driver: bridge
